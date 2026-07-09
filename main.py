@@ -22,7 +22,13 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
-
+from models import (
+    FrontendWageRequest,
+    WageLevelRequest,
+    WageLevelResponse,
+    ErrorResponse,
+    EducationLevel,
+)
 from models import WageLevelRequest, WageLevelResponse, ErrorResponse
 from scoring import determine_wage_level
 
@@ -130,19 +136,70 @@ async def health():
     tags=["wage-level"],
     summary="Estimate DOL prevailing wage level (I-IV) from job requirements",
 )
-async def wage_level(req: WageLevelRequest, request: Request):
+async def wage_level(req: FrontendWageRequest, request: Request):
     request_id = getattr(request.state, "request_id", "unknown")
-    logger.info(
-        f"[{request_id}] Scoring request for occupation='{req.occupation_title}' "
-        f"soc_code={req.soc_code}"
+
+    education_map = {
+        "High School": EducationLevel.HIGH_SCHOOL,
+        "high school": EducationLevel.HIGH_SCHOOL,
+        "Associate": EducationLevel.ASSOCIATE,
+        "associate": EducationLevel.ASSOCIATE,
+        "Bachelor": EducationLevel.BACHELORS,
+        "Bachelor's": EducationLevel.BACHELORS,
+        "bachelor": EducationLevel.BACHELORS,
+        "bachelors": EducationLevel.BACHELORS,
+        "Masters": EducationLevel.MASTERS,
+        "Master": EducationLevel.MASTERS,
+        "master": EducationLevel.MASTERS,
+        "masters": EducationLevel.MASTERS,
+        "Doctorate": EducationLevel.DOCTORATE,
+        "doctorate": EducationLevel.DOCTORATE,
+        "PhD": EducationLevel.DOCTORATE,
+        "phd": EducationLevel.DOCTORATE,
+    }
+
+    required_edu = education_map.get(
+        req.education,
+        EducationLevel.BACHELORS
     )
-    result = determine_wage_level(req)
+
+    # Convert frontend request into the existing scoring request
+    internal_request = WageLevelRequest(
+        occupation_title=req.jobTitle,
+        soc_code=req.socCode,
+
+        # Default assumptions for Software Engineer
+        baseline_education=EducationLevel.BACHELORS,
+        required_education=required_edu,
+
+        baseline_experience_years=2,
+        required_experience_years=req.experienceYears,
+
+        special_skills_required=len(req.specialSkills) > 0,
+
+        # Java/Spring/AWS are customary skills
+        special_skills_customary=True,
+
+        supervisory_duties_required=req.supervisoryDuties,
+
+        # Since supervisoryDuties=False by default,
+        # keeping this True avoids validation errors
+        supervisory_customary=True,
+    )
+
+    logger.info(
+        f"[{request_id}] Scoring request for occupation='{internal_request.occupation_title}' "
+        f"soc_code={internal_request.soc_code}"
+    )
+
+    result = determine_wage_level(internal_request)
+
     logger.info(
         f"[{request_id}] Result: {result.wage_level} "
         f"({result.total_points} total points)"
     )
-    return result
 
+    return result
 
 @app.get("/", tags=["meta"])
 async def root():

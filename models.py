@@ -10,7 +10,7 @@ bad input is rejected loudly (HTTP 422) rather than silently scored.
 from enum import Enum
 from typing import Optional, Dict, List
 from pydantic import BaseModel, Field, field_validator, model_validator
-
+from typing import List
 
 class EducationLevel(str, Enum):
     """
@@ -121,6 +121,20 @@ class WageLevelRequest(BaseModel):
 
         return self
 
+class WorkLocation(BaseModel):
+    state: str
+    city: str
+
+
+class FrontendWageRequest(BaseModel):
+    jobTitle: str
+    socCode: str | None = None
+    workLocation: WorkLocation | None = None
+    education: str
+    experienceYears: float
+    specialSkills: List[str] = []
+    supervisoryDuties: bool = False
+    employmentType: str
 
 class FactorBreakdown(BaseModel):
     factor: str
@@ -144,3 +158,4 @@ class ErrorResponse(BaseModel):
     error: str
     detail: str
     fields: Optional[Dict[str, str]] = None
+
